@@ -11,11 +11,11 @@
     "node": ">=10"
   },
   "scripts": {
-    "start": "tsdx watch",
-    "build": "tsdx build",
+    "start": "tsdx watch --target node",
+    "build": "tsdx build --target node",
     "test": "tsdx test",
     "lint": "tsdx lint",
-    "prepare": "tsdx build"
+    "prepare": "yarn build"
   },
   "peerDependencies": {},
   "husky": {
@@ -33,9 +33,14 @@
   "author": "Justin Bennett",
   "module": "dist/qmk-webusb.esm.js",
   "devDependencies": {
+    "@types/node": "^14.0.13",
     "husky": "^4.2.5",
     "tsdx": "^0.13.2",
     "tslib": "^2.0.0",
     "typescript": "^3.9.5"
+  },
+  "dependencies": {
+    "node-hid": "^1.2.0",
+    "webusb": "^2.0.2"
   }
 }
