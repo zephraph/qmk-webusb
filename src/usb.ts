@@ -25,6 +25,43 @@ export const usbCommands = {
   },
 };
 
+export type Commands = keyof typeof usbCommands['current'];
+export type LegacyCommands = keyof typeof usbCommands['legacy'];
+export type AnyCommands = Commands | LegacyCommands;
+
+export function assertLegacyCommand(
+  cmd: string
+): asserts cmd is LegacyCommands {
+  if (!Object.keys(usbCommands['legacy']).includes(cmd)) {
+    throw new TypeError(
+      `${cmd} is not a legacy command, but keyboard is in legacy mode`
+    );
+  }
+}
+
+export function getCommand(cmd: Commands, legacy?: false): number;
+export function getCommand(cmd: LegacyCommands, legacy: true): number;
+export function getCommand(cmd: AnyCommands, legacy = false) {
+  return legacy
+    ? usbCommands['legacy'][cmd as LegacyCommands]
+    : usbCommands['current'][cmd as Commands];
+}
+
+export const packCommands = (packet: USBInTransferResult) => {
+  const cmds = [];
+  let currentCmd = [];
+  for (let i = 0; i < packet.data?.byteLength! || 0; i++) {
+    const byte = packet.data!.getInt8(i);
+    if (byte === -2) {
+      cmds.push(currentCmd);
+      currentCmd = [];
+    } else {
+      currentCmd.push(byte);
+    }
+  }
+  return cmds;
+};
+
 export function Uint8ArrayToString(array: Uint8Array) {
   /* eslint-disable  no-bitwise */
   const len = array.length;
@@ -143,3 +180,46 @@ export function Utf8ArrayToStr(array: Uint8Array) {
 
   return out;
 }
+
+export const devicesFound = (devices: USBDevice[]): Promise<void | USBDevice> =>
+  new Promise(resolve => {
+    if (devices.length === 1) {
+      resolve(devices[0]);
+      return;
+    }
+    process.stdin.setRawMode(true);
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('readable', () => {
+      const input = process.stdin.read();
+
+      if (input === '\u0003') {
+        process.exit();
+      } else {
+        const index = parseInt(input);
+        if (index && index <= devices.length) {
+          process.stdin.setRawMode(false);
+          resolve(devices[index - 1]);
+        }
+      }
+    });
+
+    console.log("select a device to see it's active configuration:");
+    devices.forEach((device, index) => {
+      console.log(`${index + 1}: ${device.productName || device.serialNumber}`);
+    });
+  });
+
+export const createPacketSender = <L extends true | false | undefined>(
+  device: USBDevice,
+  outEndpoint: number,
+  legacy?: L
+) => (
+  cmd: L extends true ? LegacyCommands : Commands,
+  params: number[] = []
+) => {
+  const command = legacy
+    ? getCommand(cmd as LegacyCommands, true)
+    : getCommand(cmd);
+  const packet = new Uint8Array([command].concat(params));
+  return device.transferOut(outEndpoint, packet);
+};
